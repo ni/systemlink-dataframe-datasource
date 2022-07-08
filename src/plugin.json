@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "SystemLink Dataframes",
+  "id": "ni-sldataframe-datasource",
+  "metrics": true,
+  "info": {
+    "description": "Grafana data source for the SystemLink Dataframe service",
+    "author": {
+      "name": "NI",
+      "url": "ni.com"
+    },
+    "keywords": [],
+    "logos": {
+      "small": "img/logo-ni.svg",
+      "large": "img/logo-ni.svg"
+    },
+    "links": [
+      {
+        "name": "Website",
+        "url": "https://github.com/grafana/grafana-starter-datasource"
+      },
+      {
+        "name": "License",
+        "url": "https://github.com/grafana/grafana-starter-datasource/blob/master/LICENSE"
+      }
+    ],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=8.0.0",
+    "plugins": []
+  }
+}
