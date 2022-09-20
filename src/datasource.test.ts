@@ -101,8 +101,8 @@ it('should automatically apply time filters when index column is a timestamp', a
     expect.objectContaining({
       data: expect.objectContaining({
         filters: [
-          { column: 'time', operation: 'GREATER_THAN_EQUALS', value: '2022-09-14T00:00:00.000Z' },
-          { column: 'time', operation: 'LESS_THAN_EQUALS', value: '2022-09-16T00:00:00.000Z' },
+          { column: 'time', operation: 'GREATER_THAN_EQUALS', value: from.toISOString() },
+          { column: 'time', operation: 'LESS_THAN_EQUALS', value: to.toISOString() },
         ],
       }),
     })
