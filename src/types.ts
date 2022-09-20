@@ -1,6 +1,6 @@
 import { DataQuery } from '@grafana/data';
 
-export type QueryColumn = Pick<Column, 'name' | 'dataType'>;
+export type QueryColumn = Pick<Column, 'name' | 'dataType' | 'columnType'>;
 
 export interface DataframeQuery extends DataQuery {
   tableId?: string;
@@ -20,6 +20,20 @@ export interface Column {
   dataType: ColumnDataType;
   columnType: 'INDEX' | 'NULLABLE' | 'NORMAL';
   properties: Record<string, string>;
+}
+
+export interface ColumnFilter {
+  column: string;
+  operation:
+    | 'EQUALS'
+    | 'LESS_THAN'
+    | 'LESS_THAN_EQUALS'
+    | 'GREATER_THAN'
+    | 'GREATER_THAN_EQUALS'
+    | 'NOT_EQUALS'
+    | 'CONTAINS'
+    | 'NOT_CONTAINS';
+  value: string;
 }
 
 export interface TableMetadata {

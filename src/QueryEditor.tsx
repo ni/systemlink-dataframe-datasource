@@ -20,7 +20,7 @@ export const QueryEditor: React.FC<Props> = ({ app, query, datasource, onChange,
   };
 
   const handleColumnChange = (items: Array<SelectableValue<string>>) => {
-    const columns = items.map(({ value, dataType }) => ({ name: value!, dataType }));
+    const columns = items.map(({ value, dataType, columnType }) => ({ name: value!, dataType, columnType }));
     onChange({ ...query, columns });
   };
 
@@ -47,5 +47,5 @@ export const QueryEditor: React.FC<Props> = ({ app, query, datasource, onChange,
 };
 
 const columnsToOptions = (columns: Column[] | QueryColumn[] = []): Array<SelectableValue<string>> => {
-  return columns.map(({ name, dataType }) => ({ label: name, value: name, dataType }));
+  return columns.map(({ name, dataType, columnType }) => ({ label: name, value: name, dataType, columnType }));
 };
