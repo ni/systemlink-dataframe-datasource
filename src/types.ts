@@ -5,11 +5,17 @@ export type QueryColumn = Pick<Column, 'name' | 'dataType' | 'columnType'>;
 export interface DataframeQuery extends DataQuery {
   tableId?: string;
   columns?: QueryColumn[];
+  decimationMethod?: string;
+  filterNulls?: boolean;
+  applyTimeFilters?: boolean;
 }
 
-type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
+export interface ValidDataframeQuery extends DataframeQuery {
+  tableId: string;
+  columns: QueryColumn[];
+}
 
-export function isValidQuery(query: DataframeQuery): query is WithRequired<DataframeQuery, 'tableId' | 'columns'> {
+export function isValidQuery(query: DataframeQuery): query is ValidDataframeQuery {
   return Boolean(query.tableId) && Boolean(query.columns?.length);
 }
 
@@ -33,7 +39,7 @@ export interface ColumnFilter {
     | 'NOT_EQUALS'
     | 'CONTAINS'
     | 'NOT_CONTAINS';
-  value: string;
+  value: string | null;
 }
 
 export interface TableMetadata {
