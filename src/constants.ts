@@ -4,7 +4,7 @@ export const decimationMethods = [
   {
     value: 'LOSSY',
     label: 'Lossy',
-    description: nbsp`Faster, but not as accurate`
+    description: nbsp`Completes faster but is less accurate`
   },
   {
     value: 'MAX_MIN',
