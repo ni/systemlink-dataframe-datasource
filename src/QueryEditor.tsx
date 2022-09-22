@@ -38,7 +38,7 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
       <InlineField label="Id" error="Table does not exist" invalid={!!tableMetadata.error}>
         <Input defaultValue={query.tableId} width={26} onBlur={handleIdInputBlur} />
       </InlineField>
-      <InlineField label="Columns" tooltip="The columns to include in the response data.">
+      <InlineField label="Columns" tooltip="Specifies the columns to include in the response data.">
         <MultiSelect
           isLoading={tableMetadata.loading}
           options={columnsToOptions(tableMetadata.value?.columns)}
@@ -54,7 +54,7 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
           value={query.decimationMethod ?? defaultDecimationMethod}
         />
       </InlineField>
-      <InlineField label="Filter nulls" tooltip="Filter out null and NaN values before decimating the data.">
+      <InlineField label="Filter nulls" tooltip="Filters out null and NaN values before decimating the data.">
         <InlineSwitch
           value={query.filterNulls}
           onChange={(event) => handleQueryChange({ ...query, filterNulls: event.currentTarget.checked }, true)}
@@ -62,7 +62,7 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
       </InlineField>
       <InlineField
         label="Use time range"
-        tooltip="If the table's index is a timestamp, only query for data within the dashboard's time range. This should be enabled when interacting with your data on a graph."
+        tooltip="Queries only for data within the dashboard time range if the table index is a timestamp. Enable when interacting with your data on a graph."
       >
         <InlineSwitch
           value={query.applyTimeFilters}

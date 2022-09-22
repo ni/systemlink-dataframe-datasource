@@ -10,9 +10,10 @@ import {
   standardTransformers,
   DataFrame,
   TimeRange,
+  DataQueryError,
 } from '@grafana/data';
 
-import { BackendSrvRequest, getBackendSrv } from '@grafana/runtime';
+import { BackendSrvRequest, getBackendSrv, isFetchError } from '@grafana/runtime';
 
 import {
   ColumnDataType,
@@ -38,24 +39,28 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
   }
 
   async query(options: DataQueryRequest<DataframeQuery>): Promise<DataQueryResponse> {
-    const validTargets = options.targets.filter(isValidQuery);
+    try {
+      const validTargets = options.targets.filter(isValidQuery);
 
-    const data = await Promise.all(
-      validTargets.map(async (query) => {
-        const tableData = await this.getDecimatedTableData(query, options.range, options.maxDataPoints);
+      const data = await Promise.all(
+        validTargets.map(async (query) => {
+          const tableData = await this.getDecimatedTableData(query, options.range, options.maxDataPoints);
 
-        const frame = toDataFrame({
-          refId: query.refId,
-          name: query.tableId,
-          columns: query.columns.map(({ name }) => ({ text: name })),
-          rows: tableData.frame.data,
-        } as TableData);
+          const frame = toDataFrame({
+            refId: query.refId,
+            name: query.tableId,
+            columns: query.columns.map(({ name }) => ({ text: name })),
+            rows: tableData.frame.data,
+          } as TableData);
 
-        return this.convertDataFrameFields(frame, query.columns);
-      })
-    );
+          return this.convertDataFrameFields(frame, query.columns);
+        })
+      );
 
-    return { data };
+      return { data };
+    } catch (error) {
+      return { data: [], error: this.createDataQueryError(error) };
+    }
   }
 
   async getTableMetadata(id: string) {
@@ -174,5 +179,18 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     };
 
     return getBackendSrv().fetch<T>(req);
+  }
+
+  private createDataQueryError(error: unknown): DataQueryError {
+    if (!isFetchError(error)) {
+      throw error;
+    }
+
+    return {
+      message: `${error.status} - ${error.statusText}`,
+      status: error.status,
+      statusText: error.statusText,
+      data: error.data,
+    };
   }
 }
