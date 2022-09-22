@@ -23,7 +23,9 @@ import {
   isValidQuery,
   QueryColumn,
   ColumnFilter,
+  ValidDataframeQuery,
 } from './types';
+import { defaultDecimationMethod } from './constants';
 
 interface TestingStatus {
   message?: string;
@@ -39,20 +41,17 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     const validTargets = options.targets.filter(isValidQuery);
 
     const data = await Promise.all(
-      validTargets.map(async ({ columns, refId, tableId }) => {
-        const tableData = true
-          ? // TODO: Remove once decimation is added
-            await this.getTableData(tableId, columns, options.range)
-          : await this.getDecimatedTableData(tableId, columns, options.range, options.maxDataPoints);
+      validTargets.map(async (query) => {
+        const tableData = await this.getDecimatedTableData(query, options.range, options.maxDataPoints);
 
         const frame = toDataFrame({
-          refId,
-          name: tableId,
-          columns: columns.map(({ name }) => ({ text: name })),
+          refId: query.refId,
+          name: query.tableId,
+          columns: query.columns.map(({ name }) => ({ text: name })),
           rows: tableData.frame.data,
         } as TableData);
 
-        return this.convertDataFrameFields(frame, columns);
+        return this.convertDataFrameFields(frame, query.columns);
       })
     );
 
@@ -63,28 +62,26 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     return lastValueFrom(this.fetch<TableMetadata>('GET', `tables/${id}`).pipe(map((res) => res.data)));
   }
 
-  async getTableData(id: string, columns: QueryColumn[], timeRange: TimeRange) {
-    const filters: ColumnFilter[] = this.constructTimeFilters(columns, timeRange);
+  async getDecimatedTableData(query: ValidDataframeQuery, timeRange: TimeRange, intervals = 1000) {
+    const filters: ColumnFilter[] = [];
+
+    if (query.applyTimeFilters) {
+      filters.push(...this.constructTimeFilters(query.columns, timeRange));
+    }
+
+    if (query.filterNulls) {
+      filters.push(...this.constructNullFilters(query.columns));
+    }
 
     return lastValueFrom(
-      this.fetch<TableDataRows>('POST', `tables/${id}/query-data`, {
-        data: { columns: columns.map((c) => c.name), filters },
-      }).pipe(map((res) => res.data))
-    );
-  }
-
-  async getDecimatedTableData(id: string, columns: QueryColumn[], timeRange: TimeRange, intervals = 1000) {
-    const filters: ColumnFilter[] = this.constructTimeFilters(columns, timeRange);
-
-    return lastValueFrom(
-      this.fetch<TableDataRows>('POST', `tables/${id}/query-decimated-data`, {
+      this.fetch<TableDataRows>('POST', `tables/${query.tableId}/query-decimated-data`, {
         data: {
-          columns: columns.map((c) => c.name),
+          columns: query.columns.map((c) => c.name),
           filters,
           decimation: {
             intervals,
-            method: 'MAX_MIN',
-            yColumns: this.getNumericColumns(columns).map((c) => c.name),
+            method: query.decimationMethod ?? defaultDecimationMethod,
+            yColumns: this.getNumericColumns(query.columns).map((c) => c.name),
           },
         },
       }).pipe(map((res) => res.data))
@@ -93,7 +90,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
 
   async testDatasource(): Promise<TestingStatus> {
     return lastValueFrom(
-      this.fetch<TableMetadataList>('GET', 'tables').pipe(
+      this.fetch<TableMetadataList>('GET', 'tables', { params: { take: 1 } }).pipe(
         map((_) => {
           return { status: 'success', message: 'Data source connected and authentication successful!' };
         })
@@ -135,6 +132,20 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
       { column: timeIndex.name, operation: 'GREATER_THAN_EQUALS', value: timeRange.from.toISOString() },
       { column: timeIndex.name, operation: 'LESS_THAN_EQUALS', value: timeRange.to.toISOString() },
     ];
+  }
+
+  private constructNullFilters(columns: QueryColumn[]): ColumnFilter[] {
+    return columns.flatMap(({ name, columnType, dataType }) => {
+      const filters: ColumnFilter[] = [];
+
+      if (columnType === 'NULLABLE') {
+        filters.push({ column: name, operation: 'NOT_EQUALS', value: null });
+      }
+      if (dataType === 'FLOAT32' || dataType === 'FLOAT64') {
+        filters.push({ column: name, operation: 'NOT_EQUALS', value: 'NaN' });
+      }
+      return filters;
+    });
   }
 
   private getNumericColumns(columns: QueryColumn[]) {
