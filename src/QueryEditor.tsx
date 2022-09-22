@@ -15,7 +15,7 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
 
   const runQueryIfValid = () => isValidQuery(query) && onRunQuery();
 
-  const handleQueryChange = (value: DataframeQuery, runQuery?: boolean) => {
+  const handleQueryChange = (value: DataframeQuery, runQuery: boolean) => {
     onChange(value);
     if (runQuery) {
       runQueryIfValid();
@@ -24,13 +24,13 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
 
   const handleIdInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     if (query.tableId !== e.currentTarget.value) {
-      handleQueryChange({ ...query, tableId: e.currentTarget.value, columns: [] });
+      handleQueryChange({ ...query, tableId: e.currentTarget.value, columns: [] }, false);
     }
   };
 
   const handleColumnChange = (items: Array<SelectableValue<string>>) => {
     const columns = items.map(({ value, dataType, columnType }) => ({ name: value!, dataType, columnType }));
-    handleQueryChange({ ...query, columns });
+    handleQueryChange({ ...query, columns }, false);
   };
 
   return (
