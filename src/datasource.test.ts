@@ -44,7 +44,7 @@ it('should return data ignoring invalid queries', async () => {
   await ds.query(query);
 
   expect(fetchMock).toBeCalledTimes(1);
-  expect(fetchMock).toBeCalledWith(expect.objectContaining({ url: '_/v1/tables/1/query-data' }));
+  expect(fetchMock).toBeCalledWith(expect.objectContaining({ url: '_/v1/tables/1/query-decimated-data' }));
 });
 
 it('should return data for multiple targets', async () => {
@@ -89,7 +89,12 @@ it('should convert columns to Grafana fields', async () => {
 
 it('should automatically apply time filters when index column is a timestamp', async () => {
   const query = buildQuery([
-    { refId: 'A', tableId: '_', columns: [{ name: 'time', dataType: 'TIMESTAMP', columnType: 'INDEX' }] },
+    {
+      refId: 'A',
+      tableId: '_',
+      columns: [{ name: 'time', dataType: 'TIMESTAMP', columnType: 'INDEX' }],
+      applyTimeFilters: true,
+    },
   ]);
   const from = dateTime('2022-09-14T00:00:00Z');
   const to = dateTime('2022-09-16T00:00:00Z');
@@ -108,7 +113,37 @@ it('should automatically apply time filters when index column is a timestamp', a
     })
   );
 });
-xit('should provide decimation parameters correctly', async () => {
+
+it('should apply null and NaN filters', async () => {
+  const query = buildQuery([
+    {
+      refId: 'A',
+      tableId: '_',
+      columns: [
+        { name: 'int', dataType: 'TIMESTAMP', columnType: 'INDEX' },
+        { name: 'float', dataType: 'FLOAT32', columnType: 'NULLABLE' },
+        { name: 'string', dataType: 'STRING', columnType: 'NULLABLE' },
+      ],
+      filterNulls: true,
+    },
+  ]);
+
+  await ds.query(query);
+
+  expect(fetchMock).toBeCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        filters: [
+          { column: 'float', operation: 'NOT_EQUALS', value: null },
+          { column: 'float', operation: 'NOT_EQUALS', value: 'NaN' },
+          { column: 'string', operation: 'NOT_EQUALS', value: null },
+        ],
+      }),
+    })
+  );
+});
+
+it('should provide decimation parameters correctly', async () => {
   const query = buildQuery([
     {
       refId: 'A',
@@ -118,6 +153,7 @@ xit('should provide decimation parameters correctly', async () => {
         { name: 'string', dataType: 'STRING', columnType: 'NORMAL' },
         { name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' },
       ],
+      decimationMethod: 'ENTRY_EXIT',
     },
   ]);
   query.maxDataPoints = 300;
@@ -127,7 +163,7 @@ xit('should provide decimation parameters correctly', async () => {
   expect(fetchMock).toBeCalledWith(
     expect.objectContaining({
       data: expect.objectContaining({
-        decimation: { intervals: 300, method: 'MAX_MIN', yColumns: ['int', 'float'] },
+        decimation: { intervals: 300, method: 'ENTRY_EXIT', yColumns: ['int', 'float'] },
       }),
     })
   );
