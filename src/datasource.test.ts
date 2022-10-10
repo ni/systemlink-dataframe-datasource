@@ -8,9 +8,11 @@ import { DataFrameDataSource } from './datasource';
 jest.mock('@grafana/runtime', () => ({
   ...jest.requireActual('@grafana/runtime'),
   getBackendSrv: () => ({ fetch: fetchMock }),
+  getTemplateSrv: () => ({ replace: replaceMock }),
 }));
 
 const fetchMock = jest.fn<number, [BackendSrvRequest]>();
+const replaceMock = jest.fn((a: string, ...rest: any) => a);
 
 let ds: DataFrameDataSource;
 
@@ -167,6 +169,26 @@ it('should provide decimation parameters correctly', async () => {
       }),
     })
   );
+});
+
+it('attempts to replace variables in metadata query', async () => {
+  const tableId = '${tableId}';
+
+  await ds.getTableMetadata(tableId);
+
+  expect(replaceMock).toBeCalledTimes(1);
+  expect(replaceMock).toHaveBeenCalledWith(tableId);
+});
+
+it('attempts to replace variables in data query', async () => {
+  const query = buildQuery([
+    { refId: 'A', tableId: '${tableId}', columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }] },
+  ]);
+
+  await ds.query(query);
+
+  expect(replaceMock).toBeCalledTimes(1);
+  expect(replaceMock).toHaveBeenCalledWith(query.targets[0].tableId, expect.anything());
 });
 
 const buildQuery = (targets: DataframeQuery[]): DataQueryRequest<DataframeQuery> => {

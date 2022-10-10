@@ -13,7 +13,7 @@ import {
   DataQueryError,
 } from '@grafana/data';
 
-import { BackendSrvRequest, getBackendSrv, isFetchError } from '@grafana/runtime';
+import { BackendSrvRequest, getBackendSrv, getTemplateSrv, isFetchError } from '@grafana/runtime';
 
 import {
   ColumnDataType,
@@ -44,6 +44,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
 
       const data = await Promise.all(
         validTargets.map(async (query) => {
+          query.tableId = getTemplateSrv().replace(query.tableId, options.scopedVars);
           const tableData = await this.getDecimatedTableData(query, options.range, options.maxDataPoints);
 
           const frame = toDataFrame({
@@ -64,7 +65,8 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
   }
 
   async getTableMetadata(id: string) {
-    return lastValueFrom(this.fetch<TableMetadata>('GET', `tables/${id}`).pipe(map((res) => res.data)));
+    const resolvedId = getTemplateSrv().replace(id);
+    return lastValueFrom(this.fetch<TableMetadata>('GET', `tables/${resolvedId}`).pipe(map((res) => res.data)));
   }
 
   async getDecimatedTableData(query: ValidDataframeQuery, timeRange: TimeRange, intervals = 1000) {
