@@ -66,6 +66,9 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
 
   async getTableMetadata(id: string) {
     const resolvedId = getTemplateSrv().replace(id);
+    if (!resolvedId) {
+      return null;
+    }
     return lastValueFrom(this.fetch<TableMetadata>('GET', `tables/${resolvedId}`).pipe(map((res) => res.data)));
   }
 

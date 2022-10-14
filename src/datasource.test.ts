@@ -172,7 +172,7 @@ it('should provide decimation parameters correctly', async () => {
 });
 
 it('attempts to replace variables in metadata query', async () => {
-  const tableId = '${tableId}';
+  const tableId = '$tableId';
 
   await ds.getTableMetadata(tableId);
 
@@ -182,7 +182,7 @@ it('attempts to replace variables in metadata query', async () => {
 
 it('attempts to replace variables in data query', async () => {
   const query = buildQuery([
-    { refId: 'A', tableId: '${tableId}', columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }] },
+    { refId: 'A', tableId: '$tableId', columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }] },
   ]);
 
   await ds.query(query);

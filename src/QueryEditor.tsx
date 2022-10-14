@@ -1,10 +1,12 @@
 import React from 'react';
 import { useAsync } from 'react-use';
-import { QueryEditorProps, SelectableValue } from '@grafana/data';
+import { QueryEditorProps, SelectableValue, toOption } from '@grafana/data';
 import { DataFrameDataSource } from './datasource';
 import { Column, DataframeQuery, isValidQuery, QueryColumn } from './types';
-import { InlineField, InlineSwitch, Input, MultiSelect, Select } from '@grafana/ui';
+import { InlineField, InlineSwitch, MultiSelect, Select } from '@grafana/ui';
 import { decimationMethods, defaultDecimationMethod } from './constants';
+import _ from 'lodash';
+import { getTemplateSrv } from '@grafana/runtime';
 
 type Props = QueryEditorProps<DataFrameDataSource, DataframeQuery>;
 
@@ -22,9 +24,9 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
     }
   };
 
-  const handleIdInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (query.tableId !== e.currentTarget.value) {
-      handleQueryChange({ ...query, tableId: e.currentTarget.value, columns: [] }, false);
+  const handleIdChange = (item: SelectableValue<string>) => {
+    if (query.tableId !== item.value) {
+      handleQueryChange({ ...query, tableId: item.value, columns: [] }, false);
     }
   };
 
@@ -36,7 +38,15 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
   return (
     <>
       <InlineField label="Id" error="Table does not exist" invalid={!!tableMetadata.error}>
-        <Input defaultValue={query.tableId} width={26} onBlur={handleIdInputBlur} />
+        <Select
+          allowCustomValue
+          noOptionsMessage="No dashboard variables"
+          onChange={handleIdChange}
+          options={getVariableOptions()}
+          placeholder="Enter table id or variable"
+          width={30}
+          value={query.tableId ? toOption(query.tableId) : null}
+        ></Select>
       </InlineField>
       <InlineField label="Columns" tooltip="Specifies the columns to include in the response data.">
         <MultiSelect
@@ -75,4 +85,10 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
 
 const columnsToOptions = (columns: Column[] | QueryColumn[] = []): Array<SelectableValue<string>> => {
   return columns.map(({ name, dataType, columnType }) => ({ label: name, value: name, dataType, columnType }));
+};
+
+const getVariableOptions = () => {
+  return getTemplateSrv()
+    .getVariables()
+    .map((v) => toOption('$' + v.name));
 };
