@@ -16,9 +16,7 @@ export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) 
   const [errorMsg, setErrorMsg] = useState<string>('');
   const handleError = (error: Error) => setErrorMsg(parseErrorMessage(error));
 
-  const tableMetadata = useAsync(() => {
-    return datasource.getTableMetadata(query.tableId).catch(handleError);
-  }, [query.tableId]);
+  const tableMetadata = useAsync(() => datasource.getTableMetadata(query.tableId).catch(handleError), [query.tableId]);
 
   const runQueryIfValid = () => isValidQuery(query) && onRunQuery();
 
