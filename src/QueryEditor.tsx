@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useAsync, useTimeoutFn } from 'react-use';
+import React, { useState } from 'react';
+import { useAsync } from 'react-use';
 import { QueryEditorProps, SelectableValue, toOption } from '@grafana/data';
 import { DataFrameDataSource } from './datasource';
-import { Column, DataframeQuery, isSystemLinkError, isValidQuery, QueryColumn } from './types';
-import { InlineField, InlineSwitch, MultiSelect, Select, Alert, AsyncSelect, LoadOptionsCallback } from '@grafana/ui';
-import { decimationMethods, defaultDecimationMethod, errorCodes } from './constants';
+import { Column, DataframeQuery, isValidQuery, QueryColumn } from './types';
+import { InlineField, InlineSwitch, MultiSelect, Select, AsyncSelect, LoadOptionsCallback } from '@grafana/ui';
+import { decimationMethods, defaultDecimationMethod } from './constants';
 import _ from 'lodash';
-import { getTemplateSrv, isFetchError } from '@grafana/runtime';
+import { getTemplateSrv } from '@grafana/runtime';
 import { isValidId } from 'utils';
+import { FloatingError, parseErrorMessage } from 'errors';
 
 type Props = QueryEditorProps<DataFrameDataSource, DataframeQuery>;
 
@@ -114,30 +115,4 @@ const getVariableOptions = () => {
   return getTemplateSrv()
     .getVariables()
     .map((v) => toOption('$' + v.name));
-};
-
-const FloatingError = ({ message = '' }) => {
-  const [hide, setHide] = useState(false);
-  const reset = useTimeoutFn(() => setHide(true), 5000)[2];
-  useEffect(() => {
-    setHide(false);
-    reset();
-  }, [message, reset]);
-
-  if (hide || !message) {
-    return null;
-  }
-  return <Alert title={message} elevated style={{ position: 'absolute', top: 0, right: 0, width: '50%' }} />;
-};
-
-const parseErrorMessage = (error: Error) => {
-  if (isFetchError(error)) {
-    if (isSystemLinkError(error.data)) {
-      return errorCodes[error.data.error.code] ?? error.data.error.message;
-    }
-
-    return error.data.message || error.statusText;
-  }
-
-  return error.message;
 };
