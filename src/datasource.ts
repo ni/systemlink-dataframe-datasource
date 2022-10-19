@@ -64,7 +64,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     }
   }
 
-  async getTableMetadata(id: string) {
+  async getTableMetadata(id?: string) {
     const resolvedId = getTemplateSrv().replace(id);
     if (!resolvedId) {
       return null;
@@ -95,6 +95,16 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
           },
         },
       }).pipe(map((res) => res.data))
+    );
+  }
+
+  async queryTables(query: string) {
+    var filter = `name.Contains("${query}")`;
+
+    return lastValueFrom(
+      this.fetch<TableMetadataList>('POST', 'query-tables', { data: { filter, take: 5 } }).pipe(
+        map((res) => res.data.tables)
+      )
     );
   }
 

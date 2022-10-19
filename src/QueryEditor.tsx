@@ -1,18 +1,22 @@
-import React from 'react';
-import { useAsync } from 'react-use';
+import React, { useState, useEffect } from 'react';
+import { useAsync, useTimeoutFn } from 'react-use';
 import { QueryEditorProps, SelectableValue, toOption } from '@grafana/data';
 import { DataFrameDataSource } from './datasource';
-import { Column, DataframeQuery, isValidQuery, QueryColumn } from './types';
-import { InlineField, InlineSwitch, MultiSelect, Select } from '@grafana/ui';
-import { decimationMethods, defaultDecimationMethod } from './constants';
+import { Column, DataframeQuery, isSystemLinkError, isValidQuery, QueryColumn } from './types';
+import { InlineField, InlineSwitch, MultiSelect, Select, Alert, AsyncSelect, LoadOptionsCallback } from '@grafana/ui';
+import { decimationMethods, defaultDecimationMethod, errorCodes } from './constants';
 import _ from 'lodash';
-import { getTemplateSrv } from '@grafana/runtime';
+import { getTemplateSrv, isFetchError } from '@grafana/runtime';
+import { isValidId } from 'utils';
 
 type Props = QueryEditorProps<DataFrameDataSource, DataframeQuery>;
 
-export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRunQuery }) => {
-  const tableMetadata = useAsync(async () => {
-    return query.tableId ? await datasource.getTableMetadata(query.tableId) : null;
+export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) => {
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const handleError = (error: Error) => setErrorMsg(parseErrorMessage(error));
+
+  const tableMetadata = useAsync(() => {
+    return datasource.getTableMetadata(query.tableId).catch(handleError);
   }, [query.tableId]);
 
   const runQueryIfValid = () => isValidQuery(query) && onRunQuery();
@@ -35,18 +39,36 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
     handleQueryChange({ ...query, columns }, false);
   };
 
+  const loadTableOptions = _.debounce((query: string, cb?: LoadOptionsCallback<string>) => {
+    datasource
+      .queryTables(query)
+      .then((tables) => cb?.(tables.map((t) => ({ label: t.name, value: t.id, description: t.id }))))
+      .catch(handleError);
+  }, 500);
+
+  const handleLoadOptions = (query: string, cb?: LoadOptionsCallback<string>) => {
+    if (!query || query.startsWith('$')) {
+      return cb?.(getVariableOptions().filter((v) => v.value?.includes(query)));
+    }
+
+    loadTableOptions(query, cb);
+  };
+
   return (
-    <>
-      <InlineField label="Id" error="Table does not exist" invalid={!!tableMetadata.error}>
-        <Select
+    <div style={{ position: 'relative' }}>
+      <InlineField label="Id">
+        <AsyncSelect
+          allowCreateWhileLoading
           allowCustomValue
-          noOptionsMessage="No dashboard variables"
+          cacheOptions={false}
+          defaultOptions
+          isValidNewOption={isValidId}
+          loadOptions={handleLoadOptions}
           onChange={handleIdChange}
-          options={getVariableOptions()}
-          placeholder="Enter table id or variable"
+          placeholder="Search by name or enter id"
           width={30}
           value={query.tableId ? toOption(query.tableId) : null}
-        ></Select>
+        />
       </InlineField>
       <InlineField label="Columns" tooltip="Specifies the columns to include in the response data.">
         <MultiSelect
@@ -79,7 +101,8 @@ export const QueryEditor: React.FC<Props> = ({ query, datasource, onChange, onRu
           onChange={(event) => handleQueryChange({ ...query, applyTimeFilters: event.currentTarget.checked }, true)}
         ></InlineSwitch>
       </InlineField>
-    </>
+      <FloatingError message={errorMsg} />
+    </div>
   );
 };
 
@@ -91,4 +114,30 @@ const getVariableOptions = () => {
   return getTemplateSrv()
     .getVariables()
     .map((v) => toOption('$' + v.name));
+};
+
+const FloatingError = ({ message = '' }) => {
+  const [hide, setHide] = useState(false);
+  const reset = useTimeoutFn(() => setHide(true), 5000)[2];
+  useEffect(() => {
+    setHide(false);
+    reset();
+  }, [message, reset]);
+
+  if (hide || !message) {
+    return null;
+  }
+  return <Alert title={message} elevated style={{ position: 'absolute', top: 0, right: 0, width: '50%' }} />;
+};
+
+const parseErrorMessage = (error: Error) => {
+  if (isFetchError(error)) {
+    if (isSystemLinkError(error.data)) {
+      return errorCodes[error.data.error.code] ?? error.data.error.message;
+    }
+
+    return error.data.message || error.statusText;
+  }
+
+  return error.message;
 };
