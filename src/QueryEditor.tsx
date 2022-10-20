@@ -43,7 +43,7 @@ export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) 
       .queryTables(query)
       .then((tables) => cb?.(tables.map((t) => ({ label: t.name, value: t.id, description: t.id }))))
       .catch(handleError);
-  }, 500);
+  }, 300);
 
   const handleLoadOptions = (query: string, cb?: LoadOptionsCallback<string>) => {
     if (!query || query.startsWith('$')) {
