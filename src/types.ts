@@ -17,15 +17,6 @@ export const defaultQuery: Omit<ValidDataframeQuery, 'refId'> = {
 
 export type ValidDataframeQuery = DataframeQuery & Required<Omit<DataframeQuery, keyof DataQuery>>;
 
-// export interface ValidDataframeQuery extends DataframeQuery {
-//   tableId: string;
-//   columns: string[];
-// }
-
-// export function isValidQuery(query: DataframeQuery): query is ValidDataframeQuery {
-//   return Boolean(query.tableId) && Boolean(query.columns?.length);
-// }
-
 export type ColumnDataType = 'BOOL' | 'INT32' | 'INT64' | 'FLOAT32' | 'FLOAT64' | 'STRING' | 'TIMESTAMP';
 
 export interface Column {
