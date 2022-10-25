@@ -1,23 +1,30 @@
 import { DataQuery } from '@grafana/data';
-
-export type QueryColumn = Pick<Column, 'name' | 'dataType' | 'columnType'>;
-
 export interface DataframeQuery extends DataQuery {
   tableId?: string;
-  columns?: QueryColumn[];
+  columns?: string[];
   decimationMethod?: string;
   filterNulls?: boolean;
   applyTimeFilters?: boolean;
 }
 
-export interface ValidDataframeQuery extends DataframeQuery {
-  tableId: string;
-  columns: QueryColumn[];
-}
+export const defaultQuery: Omit<ValidDataframeQuery, 'refId'> = {
+  tableId: '',
+  columns: [],
+  decimationMethod: 'LOSSY',
+  filterNulls: false,
+  applyTimeFilters: false
+};
 
-export function isValidQuery(query: DataframeQuery): query is ValidDataframeQuery {
-  return Boolean(query.tableId) && Boolean(query.columns?.length);
-}
+export type ValidDataframeQuery = DataframeQuery & Required<Omit<DataframeQuery, keyof DataQuery>>;
+
+// export interface ValidDataframeQuery extends DataframeQuery {
+//   tableId: string;
+//   columns: string[];
+// }
+
+// export function isValidQuery(query: DataframeQuery): query is ValidDataframeQuery {
+//   return Boolean(query.tableId) && Boolean(query.columns?.length);
+// }
 
 export type ColumnDataType = 'BOOL' | 'INT32' | 'INT64' | 'FLOAT32' | 'FLOAT64' | 'STRING' | 'TIMESTAMP';
 

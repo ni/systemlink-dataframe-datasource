@@ -1,8 +1,8 @@
-import { of } from 'rxjs';
+import { of, Observable } from 'rxjs';
 import { DataQueryRequest, DataSourceInstanceSettings, dateTime, Field, FieldType } from '@grafana/data';
 import { BackendSrvRequest, FetchResponse } from '@grafana/runtime';
 
-import { DataframeQuery } from './types';
+import { DataframeQuery, TableDataRows, TableMetadata } from './types';
 import { DataFrameDataSource } from './datasource';
 
 jest.mock('@grafana/runtime', () => ({
@@ -11,7 +11,7 @@ jest.mock('@grafana/runtime', () => ({
   getTemplateSrv: () => ({ replace: replaceMock }),
 }));
 
-const fetchMock = jest.fn<number, [BackendSrvRequest]>();
+const fetchMock = jest.fn<Observable<FetchResponse>, [BackendSrvRequest]>();
 const replaceMock = jest.fn((a: string, ...rest: any) => a);
 
 let ds: DataFrameDataSource;
@@ -23,7 +23,7 @@ beforeEach(() => {
     name: 'SystemLink Dataframes',
   };
   ds = new DataFrameDataSource(instanceSettings as DataSourceInstanceSettings);
-  setupFetchMock(fakeDataResponse);
+  setupFetchMock();
 });
 
 it('should return no data if there are no valid queries', async () => {
@@ -40,24 +40,24 @@ it('should return no data if there are no valid queries', async () => {
 it('should return data ignoring invalid queries', async () => {
   const query = buildQuery([
     { refId: 'A', tableId: '_' }, // invalid
-    { refId: 'B', tableId: '1', columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }] },
+    { refId: 'B', tableId: '1', columns: ['float'] },
   ]);
 
   await ds.query(query);
 
-  expect(fetchMock).toBeCalledTimes(1);
+  expect(fetchMock).toBeCalledTimes(2);
   expect(fetchMock).toBeCalledWith(expect.objectContaining({ url: '_/v1/tables/1/query-decimated-data' }));
 });
 
 it('should return data for multiple targets', async () => {
   const query = buildQuery([
-    { refId: 'A', tableId: '1', columns: [{ name: 'int', dataType: 'INT32', columnType: 'NORMAL' }] },
-    { refId: 'B', tableId: '2', columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }] },
+    { refId: 'A', tableId: '1', columns: ['int'] },
+    { refId: 'B', tableId: '2', columns: ['float'] },
   ]);
 
   const response = await ds.query(query);
 
-  expect(fetchMock).toBeCalledTimes(2);
+  expect(fetchMock).toBeCalledTimes(4);
   expect(response.data).toHaveLength(2);
 });
 
@@ -66,13 +66,7 @@ it('should convert columns to Grafana fields', async () => {
     {
       refId: 'A',
       tableId: '_',
-      columns: [
-        { name: 'int', dataType: 'INT32', columnType: 'INDEX' },
-        { name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' },
-        { name: 'string', dataType: 'STRING', columnType: 'NORMAL' },
-        { name: 'time', dataType: 'TIMESTAMP', columnType: 'NORMAL' },
-        { name: 'bool', dataType: 'BOOL', columnType: 'NORMAL' },
-      ],
+      columns: ['int', 'float', 'string', 'time', 'bool'],
     },
   ]);
 
@@ -94,7 +88,7 @@ it('should automatically apply time filters when index column is a timestamp', a
     {
       refId: 'A',
       tableId: '_',
-      columns: [{ name: 'time', dataType: 'TIMESTAMP', columnType: 'INDEX' }],
+      columns: ['time'],
       applyTimeFilters: true,
     },
   ]);
@@ -121,11 +115,7 @@ it('should apply null and NaN filters', async () => {
     {
       refId: 'A',
       tableId: '_',
-      columns: [
-        { name: 'int', dataType: 'TIMESTAMP', columnType: 'INDEX' },
-        { name: 'float', dataType: 'FLOAT32', columnType: 'NULLABLE' },
-        { name: 'string', dataType: 'STRING', columnType: 'NULLABLE' },
-      ],
+      columns: ['int', 'float', 'string'],
       filterNulls: true,
     },
   ]);
@@ -150,11 +140,7 @@ it('should provide decimation parameters correctly', async () => {
     {
       refId: 'A',
       tableId: '_',
-      columns: [
-        { name: 'int', dataType: 'INT32', columnType: 'NORMAL' },
-        { name: 'string', dataType: 'STRING', columnType: 'NORMAL' },
-        { name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' },
-      ],
+      columns: ['int', 'string', 'float'],
       decimationMethod: 'ENTRY_EXIT',
     },
   ]);
@@ -171,8 +157,42 @@ it('should provide decimation parameters correctly', async () => {
   );
 });
 
+it('should cache table metadata for subsequent requests', async () => {
+  const query = buildQuery([{ refId: 'A', tableId: '1', columns: ['int'] }]);
+
+  await ds.query(query);
+
+  expect(fetchMock).toBeCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({ url: '_/v1/tables/1' }));
+
+  await ds.query(query);
+
+  expect(fetchMock).toBeCalledTimes(3);
+});
+
+it('should return error if query columns do not match table metadata', async () => {
+  const query = buildQuery([{ refId: 'A', tableId: '1', columns: ['nonexistent'] }]);
+
+  await expect(ds.query(query)).rejects.toEqual(expect.anything());
+});
+
+it('should migrate queries using columns of arrays of objects', async () => {
+  const query = buildQuery([
+    {
+      refId: 'B',
+      tableId: '1',
+      columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }],
+    } as unknown as DataframeQuery,
+  ]);
+
+  await ds.query(query);
+
+  expect(fetchMock).toBeCalledWith(expect.objectContaining({ data: expect.objectContaining({ columns: ['float'] }) }));
+});
+
 it('attempts to replace variables in metadata query', async () => {
   const tableId = '$tableId';
+  replaceMock.mockReturnValue('1');
 
   await ds.getTableMetadata(tableId);
 
@@ -181,13 +201,12 @@ it('attempts to replace variables in metadata query', async () => {
 });
 
 it('attempts to replace variables in data query', async () => {
-  const query = buildQuery([
-    { refId: 'A', tableId: '$tableId', columns: [{ name: 'float', dataType: 'FLOAT32', columnType: 'NORMAL' }] },
-  ]);
+  const query = buildQuery([{ refId: 'A', tableId: '$tableId', columns: ['float'] }]);
+  replaceMock.mockReturnValue('1');
 
   await ds.query(query);
 
-  expect(replaceMock).toBeCalledTimes(1);
+  expect(replaceMock).toBeCalledTimes(2);
   expect(replaceMock).toHaveBeenCalledWith(query.targets[0].tableId, expect.anything());
 });
 
@@ -198,9 +217,17 @@ const buildQuery = (targets: DataframeQuery[]): DataQueryRequest<DataframeQuery>
   };
 };
 
-const setupFetchMock = (response: any, mock?: any) => {
-  const defaultMock = () => mock ?? of(createFetchResponse(response));
-  fetchMock.mockImplementation(defaultMock);
+const setupFetchMock = () => {
+  fetchMock.mockImplementation((options: BackendSrvRequest) => {
+    if (/\/tables\/\w+$/.test(options.url)) {
+      return of(createFetchResponse(fakeMetadataResponse));
+    }
+    if (/\/tables\/\w+\/query-decimated-data$/.test(options.url)) {
+      return of(createFetchResponse(fakeDataResponse));
+    }
+
+    throw new Error('Unexpected request');
+  });
 };
 
 const createFetchResponse = <T>(data: T): FetchResponse<T> => {
@@ -217,15 +244,27 @@ const createFetchResponse = <T>(data: T): FetchResponse<T> => {
   };
 };
 
-const fakeDataResponse = {
+const fakeMetadataResponse: TableMetadata = {
+  columns: [
+    { name: 'time', dataType: 'TIMESTAMP', columnType: 'INDEX', properties: {} },
+    { name: 'int', dataType: 'INT32', columnType: 'NORMAL', properties: {} },
+    { name: 'float', dataType: 'FLOAT32', columnType: 'NULLABLE', properties: {} },
+    { name: 'string', dataType: 'STRING', columnType: 'NULLABLE', properties: {} },
+    { name: 'bool', dataType: 'BOOL', columnType: 'NORMAL', properties: {} },
+  ],
+  id: '_',
+  name: 'Test Table',
+  workspace: '_',
+};
+
+const fakeDataResponse: TableDataRows = {
   frame: {
     columns: ['int', 'float', 'string', 'time', 'bool'],
     data: [
-      ['1', '1.1', 'first', '2022-09-14T06:01:00.0000000Z', true],
-      ['2', '2.2', 'second', '2022-09-14T06:02:00.0000000Z', false],
+      ['1', '1.1', 'first', '2022-09-14T06:01:00.0000000Z', 'true'],
+      ['2', '2.2', 'second', '2022-09-14T06:02:00.0000000Z', 'false'],
     ],
   },
-  totalRowCount: 2,
   continuationToken: '_',
 };
 

@@ -18,8 +18,6 @@ export const decimationMethods = [
   },
 ];
 
-export const defaultDecimationMethod = 'LOSSY';
-
 export const errorCodes: { [key: number]: string } = {
   [-255134]: 'Invalid table ID',
   [-255130]: 'Table does not exist',

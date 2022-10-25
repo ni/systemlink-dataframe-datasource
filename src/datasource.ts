@@ -1,4 +1,6 @@
 import { lastValueFrom, map } from 'rxjs';
+import TTLCache from '@isaacs/ttlcache';
+import deepEqual from 'fast-deep-equal';
 import {
   DataQueryRequest,
   DataQueryResponse,
@@ -11,6 +13,7 @@ import {
   DataFrame,
   TimeRange,
   DataQueryError,
+  CoreApp,
 } from '@grafana/data';
 
 import { BackendSrvRequest, getBackendSrv, getTemplateSrv, isFetchError } from '@grafana/runtime';
@@ -21,12 +24,12 @@ import {
   TableMetadata,
   TableMetadataList,
   TableDataRows,
-  isValidQuery,
-  QueryColumn,
   ColumnFilter,
+  Column,
+  defaultQuery,
   ValidDataframeQuery,
 } from './types';
-import { defaultDecimationMethod } from './constants';
+import _ from 'lodash';
 
 interface TestingStatus {
   message?: string;
@@ -34,27 +37,33 @@ interface TestingStatus {
 }
 
 export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
+  private readonly metadataCache: TTLCache<string, TableMetadata> = new TTLCache({ ttl: 5 * 60 * 1000 });
+
   constructor(private instanceSettings: DataSourceInstanceSettings) {
     super(instanceSettings);
   }
 
   async query(options: DataQueryRequest<DataframeQuery>): Promise<DataQueryResponse> {
     try {
-      const validTargets = options.targets.filter(isValidQuery);
+      const targets = options.targets.map(this.processQuery).filter(this.shouldRunQuery);
 
       const data = await Promise.all(
-        validTargets.map(async (query) => {
+        targets.map(async (query) => {
           query.tableId = getTemplateSrv().replace(query.tableId, options.scopedVars);
-          const tableData = await this.getDecimatedTableData(query, options.range, options.maxDataPoints);
+
+          const tableMetadata = await this.getTableMetadata(query.tableId);
+          const columns = this.getColumnTypes(query.columns, tableMetadata?.columns ?? []);
+
+          const tableData = await this.getDecimatedTableData(query, columns, options.range, options.maxDataPoints);
 
           const frame = toDataFrame({
             refId: query.refId,
             name: query.tableId,
-            columns: query.columns.map(({ name }) => ({ text: name })),
+            columns: query.columns.map((name) => ({ text: name })),
             rows: tableData.frame.data,
           } as TableData);
 
-          return this.convertDataFrameFields(frame, query.columns);
+          return this.convertDataFrameFields(frame, columns);
         })
       );
 
@@ -64,34 +73,48 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     }
   }
 
+  getDefaultQuery(_core: CoreApp): Partial<DataframeQuery> {
+    return _.clone(defaultQuery);
+  }
+
   async getTableMetadata(id?: string) {
     const resolvedId = getTemplateSrv().replace(id);
     if (!resolvedId) {
       return null;
     }
-    return lastValueFrom(this.fetch<TableMetadata>('GET', `tables/${resolvedId}`).pipe(map((res) => res.data)));
+
+    var metadata = this.metadataCache.get(resolvedId);
+
+    if (!metadata) {
+      metadata = await lastValueFrom(
+        this.fetch<TableMetadata>('GET', `tables/${resolvedId}`).pipe(map((res) => res.data))
+      );
+      this.metadataCache.set(resolvedId, metadata);
+    }
+
+    return metadata;
   }
 
-  async getDecimatedTableData(query: ValidDataframeQuery, timeRange: TimeRange, intervals = 1000) {
+  async getDecimatedTableData(query: DataframeQuery, columns: Column[], timeRange: TimeRange, intervals = 1000) {
     const filters: ColumnFilter[] = [];
 
     if (query.applyTimeFilters) {
-      filters.push(...this.constructTimeFilters(query.columns, timeRange));
+      filters.push(...this.constructTimeFilters(columns, timeRange));
     }
 
     if (query.filterNulls) {
-      filters.push(...this.constructNullFilters(query.columns));
+      filters.push(...this.constructNullFilters(columns));
     }
 
     return lastValueFrom(
       this.fetch<TableDataRows>('POST', `tables/${query.tableId}/query-decimated-data`, {
         data: {
-          columns: query.columns.map((c) => c.name),
+          columns: query.columns,
           filters,
           decimation: {
             intervals,
-            method: query.decimationMethod ?? defaultDecimationMethod,
-            yColumns: this.getNumericColumns(query.columns).map((c) => c.name),
+            method: query.decimationMethod,
+            yColumns: this.getNumericColumns(columns).map((c) => c.name),
           },
         },
       }).pipe(map((res) => res.data))
@@ -118,6 +141,30 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     );
   }
 
+  processQuery(query: DataframeQuery): ValidDataframeQuery {
+    const migratedQuery = { ...defaultQuery, ...query };
+
+    // Migration for 1.6.0: DataframeQuery.columns changed to string[]
+    if (_.isObject(migratedQuery.columns[0])) {
+      migratedQuery.columns = (migratedQuery.columns as any[]).map((c) => c.name);
+    }
+
+    // If we didn't make any changes to the query, then return the original object
+    return deepEqual(migratedQuery, query) ? query as ValidDataframeQuery : migratedQuery;
+  };
+
+  private getColumnTypes(columnNames: string[], tableMetadata: Column[]) {
+    return columnNames.map((c) => {
+      const column = tableMetadata.find(({ name }) => name === c);
+
+      if (!column) {
+        throw `The table does not contain the column '${c}'`;
+      }
+
+      return column;
+    });
+  }
+
   private getFieldType(dataType: ColumnDataType): FieldType {
     switch (dataType) {
       case 'BOOL':
@@ -131,7 +178,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     }
   }
 
-  private convertDataFrameFields(frame: DataFrame, columns: QueryColumn[]) {
+  private convertDataFrameFields(frame: DataFrame, columns: Column[]) {
     const transformer = standardTransformers.convertFieldTypeTransformer.transformer;
     const conversions = columns.map(({ name, dataType }) => ({
       targetField: name,
@@ -141,7 +188,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     return transformer({ conversions })([frame])[0];
   }
 
-  private constructTimeFilters(columns: QueryColumn[], timeRange: TimeRange): ColumnFilter[] {
+  private constructTimeFilters(columns: Column[], timeRange: TimeRange): ColumnFilter[] {
     const timeIndex = columns.find((c) => c.dataType === 'TIMESTAMP' && c.columnType === 'INDEX');
 
     if (!timeIndex) {
@@ -154,7 +201,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     ];
   }
 
-  private constructNullFilters(columns: QueryColumn[]): ColumnFilter[] {
+  private constructNullFilters(columns: Column[]): ColumnFilter[] {
     return columns.flatMap(({ name, columnType, dataType }) => {
       const filters: ColumnFilter[] = [];
 
@@ -168,11 +215,11 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
     });
   }
 
-  private getNumericColumns(columns: QueryColumn[]) {
+  private getNumericColumns(columns: Column[]) {
     return columns.filter(this.isColumnNumeric);
   }
 
-  private isColumnNumeric(column: QueryColumn) {
+  private isColumnNumeric(column: Column) {
     switch (column.dataType) {
       case 'FLOAT32':
       case 'FLOAT64':
@@ -207,5 +254,9 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
       statusText: error.statusText,
       data: error.data,
     };
+  }
+
+  private shouldRunQuery(query: ValidDataframeQuery) {
+    return Boolean(query.tableId) && Boolean(query.columns.length);
   }
 }
