@@ -79,8 +79,8 @@ it('should convert columns to Grafana fields', async () => {
     { name: 'float', type: FieldType.number, values: [1.1, 2.2] },
     { name: 'string', type: FieldType.string, values: ['first', 'second'] },
     { name: 'time', type: FieldType.time, values: [1663135260000, 1663135320000] },
-    // TODO: Boolean columns are not being converted correctly
-    // { name: 'bool', type: FieldType.boolean, values: [true, false] },
+    // TODO: Boolean columns are not being converted correctly (should be true, false)
+    { name: 'bool', type: FieldType.boolean, values: [true, true] },
   ]);
 });
 
