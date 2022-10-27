@@ -29,6 +29,7 @@ import {
   defaultQuery,
   ValidDataframeQuery,
 } from './types';
+import { metadataCacheTTL } from './constants';
 import _ from 'lodash';
 
 interface TestingStatus {
@@ -37,7 +38,7 @@ interface TestingStatus {
 }
 
 export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
-  private readonly metadataCache: TTLCache<string, TableMetadata> = new TTLCache({ ttl: 5 * 60 * 1000 });
+  private readonly metadataCache: TTLCache<string, TableMetadata> = new TTLCache({ ttl: metadataCacheTTL });
 
   constructor(private instanceSettings: DataSourceInstanceSettings) {
     super(instanceSettings);
