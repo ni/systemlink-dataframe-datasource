@@ -1,6 +1,6 @@
 {
   "name": "ni-system-link-dataframes",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Grafana data source for the SystemLink Dataframe service",
   "scripts": {
     "build": "grafana-toolkit plugin:build",
