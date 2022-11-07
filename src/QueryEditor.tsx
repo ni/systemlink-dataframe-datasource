@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { useAsync } from 'react-use';
 import { QueryEditorProps, SelectableValue, toOption } from '@grafana/data';
 import { DataFrameDataSource } from './datasource';
-import { Column, DataframeQuery, isValidQuery, QueryColumn } from './types';
+import { DataframeQuery } from './types';
 import { InlineField, InlineSwitch, MultiSelect, Select, AsyncSelect, LoadOptionsCallback } from '@grafana/ui';
-import { decimationMethods, defaultDecimationMethod } from './constants';
+import { decimationMethods } from './constants';
 import _ from 'lodash';
 import { getTemplateSrv } from '@grafana/runtime';
 import { isValidId } from 'utils';
@@ -12,18 +12,19 @@ import { FloatingError, parseErrorMessage } from 'errors';
 
 type Props = QueryEditorProps<DataFrameDataSource, DataframeQuery>;
 
-export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) => {
+export const QueryEditor = (props: Props) => {
+  const { datasource, onChange, onRunQuery } = props;
+  const query = datasource.processQuery(props.query);
+
   const [errorMsg, setErrorMsg] = useState<string>('');
   const handleError = (error: Error) => setErrorMsg(parseErrorMessage(error));
 
   const tableMetadata = useAsync(() => datasource.getTableMetadata(query.tableId).catch(handleError), [query.tableId]);
 
-  const runQueryIfValid = () => isValidQuery(query) && onRunQuery();
-
   const handleQueryChange = (value: DataframeQuery, runQuery: boolean) => {
     onChange(value);
     if (runQuery) {
-      runQueryIfValid();
+      onRunQuery();
     }
   };
 
@@ -34,8 +35,7 @@ export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) 
   };
 
   const handleColumnChange = (items: Array<SelectableValue<string>>) => {
-    const columns = items.map(({ value, dataType, columnType }) => ({ name: value!, dataType, columnType }));
-    handleQueryChange({ ...query, columns }, false);
+    handleQueryChange({ ...query, columns: items.map(i => i.value!) }, false);
   };
 
   const loadTableOptions = _.debounce((query: string, cb?: LoadOptionsCallback<string>) => {
@@ -72,17 +72,17 @@ export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) 
       <InlineField label="Columns" tooltip="Specifies the columns to include in the response data.">
         <MultiSelect
           isLoading={tableMetadata.loading}
-          options={columnsToOptions(tableMetadata.value?.columns)}
+          options={(tableMetadata.value?.columns ?? []).map(c => toOption(c.name))}
           onChange={handleColumnChange}
-          onBlur={runQueryIfValid}
-          value={columnsToOptions(query.columns)}
+          onBlur={onRunQuery}
+          value={(query.columns).map(toOption)}
         />
       </InlineField>
       <InlineField label="Decimation" tooltip="Specifies the method used to decimate the data.">
         <Select
           options={decimationMethods}
-          onChange={(item) => handleQueryChange({ ...query, decimationMethod: item.value }, true)}
-          value={query.decimationMethod ?? defaultDecimationMethod}
+          onChange={(item) => handleQueryChange({ ...query, decimationMethod: item.value! }, true)}
+          value={query.decimationMethod}
         />
       </InlineField>
       <InlineField label="Filter nulls" tooltip="Filters out null and NaN values before decimating the data.">
@@ -103,10 +103,6 @@ export const QueryEditor = ({ query, datasource, onChange, onRunQuery }: Props) 
       <FloatingError message={errorMsg} />
     </div>
   );
-};
-
-const columnsToOptions = (columns: Column[] | QueryColumn[] = []): Array<SelectableValue<string>> => {
-  return columns.map(({ name, dataType, columnType }) => ({ label: name, value: name, dataType, columnType }));
 };
 
 const getVariableOptions = () => {
