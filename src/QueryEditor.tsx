@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAsync } from 'react-use';
-import { QueryEditorProps, SelectableValue, toOption } from '@grafana/data';
+import { CoreApp, QueryEditorProps, SelectableValue, toOption } from '@grafana/data';
 import { DataFrameDataSource } from './datasource';
 import { DataframeQuery } from './types';
 import { InlineField, InlineSwitch, MultiSelect, Select, AsyncSelect, LoadOptionsCallback } from '@grafana/ui';
@@ -13,8 +13,9 @@ import { FloatingError, parseErrorMessage } from 'errors';
 type Props = QueryEditorProps<DataFrameDataSource, DataframeQuery>;
 
 export const QueryEditor = (props: Props) => {
-  const { datasource, onChange, onRunQuery } = props;
+  const { datasource, onChange } = props;
   const query = datasource.processQuery(props.query);
+  const onRunQuery = () => props.app !== CoreApp.Explore && props.onRunQuery();
 
   const [errorMsg, setErrorMsg] = useState<string>('');
   const handleError = (error: Error) => setErrorMsg(parseErrorMessage(error));
