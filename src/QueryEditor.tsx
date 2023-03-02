@@ -70,7 +70,7 @@ export const QueryEditor = (props: Props) => {
           value={query.tableId ? toOption(query.tableId) : null}
         />
       </InlineField>
-      <InlineField label="Columns" tooltip="Specifies the columns to include in the response data.">
+      <InlineField label="Columns" shrink={true} tooltip="Specifies the columns to include in the response data.">
         <MultiSelect
           isLoading={tableMetadata.loading}
           options={(tableMetadata.value?.columns ?? []).map(c => toOption(c.name))}
