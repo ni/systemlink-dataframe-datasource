@@ -1,6 +1,6 @@
 {
   "name": "ni-system-link-dataframes",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "Grafana data source for the SystemLink Dataframe service",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
