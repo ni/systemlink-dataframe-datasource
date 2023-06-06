@@ -7,41 +7,28 @@ on:
   pull_request:
     branches:
       - main
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: jfrog-ci
     steps:
-      - uses: actions/checkout@v2
-
+      - uses: actions/checkout@v3
       - name: Setup Node.js environment
-        uses: actions/setup-node@v2.1.2
+        uses: actions/setup-node@v3
         with:
-          node-version: "16.x"
-
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-
-      - name: Cache yarn cache
-        uses: actions/cache@v2
-        id: cache-yarn-cache
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@v2
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-${{ matrix.node-version }}-nodemodules-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.node-version }}-nodemodules-
+          node-version: '16.x'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
+
+      - name: Check types
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test:ci
 
       - name: (Release) Update plugin version
         if: github.event_name == 'push'
@@ -49,36 +36,19 @@ jobs:
           node update-versions.js
           echo 'PLUGIN_VERSION=$(node -pe "JSON.parse(process.argv[1]).version" "$(cat package.json)")' >> $GITHUB_ENV
 
-      - name: Build and test frontend
-        run: yarn build
+      - name: Build frontend
+        run: npm run build
 
-      - name: Check for backend
-        id: check-for-backend
-        run: |
-          if [ -f "Magefile.go" ]
-          then
-            echo "::set-output name=has-backend::true"
-          fi
+      # Disabling e2e tests as they run slowly in the workflow and we haven't written any
 
-      - name: Setup Go environment
-        if: steps.check-for-backend.outputs.has-backend == 'true'
-        uses: actions/setup-go@v2
-        with:
-          go-version: "1.15"
+      # - name: Start grafana docker
+      #   run: docker-compose up -d
 
-      - name: Test backend
-        if: steps.check-for-backend.outputs.has-backend == 'true'
-        uses: magefile/mage-action@v1
-        with:
-          version: latest
-          args: coverage
+      # - name: Run e2e tests
+      #   run: npm run e2e
 
-      - name: Build backend
-        if: steps.check-for-backend.outputs.has-backend == 'true'
-        uses: magefile/mage-action@v1
-        with:
-          version: latest
-          args: buildAll
+      # - name: Stop grafana docker
+      #   run: docker-compose down
 
       - name: (Release) Package plugin
         if: github.event_name == 'push'
@@ -89,8 +59,8 @@ jobs:
       - name: (Release) Publish to Artifactory
         if: github.event_name == 'push'
         run: |
-          curl -H "Authorization:Bearer ${{ secrets.NIARTIFACTS_TOKEN }}" -T systemlink-dataframe-datasource.zip "https://niartifacts.jfrog.io/artifactory/rnd-generic-ci/ni/systemlink/systemlink-dataframe-datasource/latest.zip"
-          curl -H "Authorization:Bearer ${{ secrets.NIARTIFACTS_TOKEN }}" -T systemlink-dataframe-datasource.zip "https://niartifacts.jfrog.io/artifactory/rnd-generic-ci/ni/systemlink/systemlink-dataframe-datasource/${{ env.PLUGIN_VERSION }}.zip"
+          curl -f -H "Authorization:Bearer ${{ secrets.JFROG_ACCESS_TOKEN }}" -T systemlink-dataframe-datasource.zip "https://niartifacts.jfrog.io/artifactory/rnd-generic-ci/ni/systemlink/systemlink-dataframe-datasource/latest.zip"
+          curl -f -H "Authorization:Bearer ${{ secrets.JFROG_ACCESS_TOKEN }}" -T systemlink-dataframe-datasource.zip "https://niartifacts.jfrog.io/artifactory/rnd-generic-ci/ni/systemlink/systemlink-dataframe-datasource/${{ env.PLUGIN_VERSION }}.zip"
 
       - name: (Release) Run semantic-release
         if: github.event_name == 'push'

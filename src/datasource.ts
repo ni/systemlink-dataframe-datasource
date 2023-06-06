@@ -84,7 +84,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
       return null;
     }
 
-    var metadata = this.metadataCache.get(resolvedId);
+    let metadata = this.metadataCache.get(resolvedId);
 
     if (!metadata) {
       metadata = await lastValueFrom(
@@ -123,7 +123,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
   }
 
   async queryTables(query: string) {
-    var filter = `name.Contains("${query}")`;
+    const filter = `name.Contains("${query}")`;
 
     return lastValueFrom(
       this.fetch<TableMetadataList>('POST', 'query-tables', { data: { filter, take: 5 } }).pipe(
@@ -186,7 +186,7 @@ export class DataFrameDataSource extends DataSourceApi<DataframeQuery> {
       destinationType: this.getFieldType(dataType),
       dateFormat: 'YYYY-MM-DDTHH:mm:ss.SZ',
     }));
-    return transformer({ conversions })([frame])[0];
+    return transformer({ conversions }, { interpolate: _.identity })([frame])[0];
   }
 
   private constructTimeFilters(columns: Column[], timeRange: TimeRange): ColumnFilter[] {
