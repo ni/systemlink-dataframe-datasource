@@ -39,14 +39,16 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Start grafana docker
-        run: docker-compose up -d
+      # Disabling e2e tests as they run slowly in the workflow and we haven't written any
 
-      - name: Run e2e tests
-        run: npm run e2e
+      # - name: Start grafana docker
+      #   run: docker-compose up -d
 
-      - name: Stop grafana docker
-        run: docker-compose down
+      # - name: Run e2e tests
+      #   run: npm run e2e
+
+      # - name: Stop grafana docker
+      #   run: docker-compose down
 
       - name: (Release) Package plugin
         if: github.event_name == 'push'
